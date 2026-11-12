@@ -1,0 +1,1993 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Bullet Hell</title>
+<style>
+html, body {
+  margin: 0; padding: 0; overflow: hidden;
+  background: #05050a;
+  height: 100%; height: 100dvh;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  font-family: 'Courier New', monospace;
+  color: #fff;
+  user-select: none;
+}
+#game {
+  display: block;
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);   /* tamanho em px definido por app.js */
+  background: radial-gradient(ellipse at center, #0a0a18 0%, #000000 100%);
+  touch-action: none;
+}
+#hud {
+  position: fixed;
+  top: calc(var(--gy, 0px) + 10px); left: calc(var(--gx, 0px) + 10px);
+  font-size: 15px;
+  text-shadow: 0 0 6px #0ff;
+  line-height: 1.5;
+  pointer-events: none;
+}
+#hud .diff { color: #99a; font-size: 13px; }
+#hud .powers { color: #ffcc66; font-size: 13px; }
+#escHint {
+  position: fixed;
+  top: calc(var(--gy, 0px) + 6px); right: calc(var(--gx, 0px) + 8px);
+  font-size: 14px;
+  color: #99a;
+  padding: 8px 12px;
+  border: 1px solid #334;
+  border-radius: 8px;
+  background: rgba(5,5,12,0.5);
+  cursor: pointer;
+  z-index: 5;
+}
+/* telas estreitas (celular em pé): HUD mais enxuto e barra do chefe embaixo */
+.narrow #hud { font-size: 13px; line-height: 1.4; }
+.narrow #hud .diff { display: none; }
+.narrow #bossBarWrap { top: auto; bottom: calc(var(--gy, 0px) + 30px); }
+.narrow #bossLabel { top: auto; bottom: calc(var(--gy, 0px) + 10px); }
+#bossBarWrap {
+  position: fixed;
+  top: calc(var(--gy, 0px) + 10px); left: calc(var(--gx, 0px) + var(--gw, 100%) / 2); transform: translateX(-50%);
+  width: min(320px, calc(var(--gw, 100vw) * 0.55)); height: 14px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid #644;
+  border-radius: 7px;
+  overflow: hidden;
+  pointer-events: none;
+}
+#bossBarFill {
+  height: 100%;
+  background: linear-gradient(90deg, #ff3355, #ff8855);
+  width: 100%;
+  transition: width 0.15s;
+}
+#bossLabel {
+  position: fixed;
+  top: calc(var(--gy, 0px) + 26px); left: calc(var(--gx, 0px) + var(--gw, 100%) / 2); transform: translateX(-50%);
+  font-size: 12px; color: #ff8888;
+  pointer-events: none;
+}
+.hidden { display: none !important; }
+
+.screen {
+  position: fixed;
+  top: 0; left: 0; width: 100%; height: 100%;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: flex-start;   /* os auto-margins abaixo centram sem cortar o topo */
+  background: rgba(2,2,6,0.92);
+  text-align: center;
+  z-index: 10;
+  overflow-y: auto;
+  padding: 20px 0;
+  box-sizing: border-box;
+}
+.screen > :first-child { margin-top: auto; }
+.screen > :last-child { margin-bottom: auto; }
+.screen h1 {
+  font-size: clamp(1.6em, 7vw, 2.2em);
+  color: #0ff;
+  text-shadow: 0 0 14px #0ff;
+  margin: 0 0 24px;
+  letter-spacing: 2px;
+}
+.menu-btn {
+  width: min(300px, 82vw);
+  margin: 7px 0;
+  padding: 14px 20px;
+  font-size: 1.05em;
+  font-family: inherit;
+  background: rgba(0,255,255,0.06);
+  color: #dde;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.menu-btn:hover, .menu-btn.active {
+  background: rgba(0,255,255,0.15);
+  border-color: #0ff;
+  color: #0ff;
+  transform: scale(1.03);
+}
+.menu-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.menu-btn:disabled:hover {
+  background: rgba(0,255,255,0.06); border-color: transparent; color: #dde; transform: none;
+}
+#mainMenuFooter { color: #667; font-size: 13px; margin-top: 18px; max-width: 360px; line-height: 1.5; }
+.highscore { color: #888; font-size: 14px; margin-top: 10px; }
+#gameOverStats p, #phaseCompleteStats p { margin: 4px 0; color: #ccd; font-size: 1.05em; }
+#gameOverStats b, #phaseCompleteStats b { color: #0ff; }
+
+.ranking-table {
+  width: min(340px, 90vw);
+  margin-top: 10px;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.ranking-table td, .ranking-table th {
+  padding: 6px 10px;
+  text-align: left;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  color: #ccd;
+}
+.ranking-table th { color: #0ff; font-weight: normal; }
+.ranking-table tr.highlight td { color: #ffcc66; font-weight: bold; }
+
+#nameInput {
+  margin-top: 14px;
+  padding: 10px 14px;
+  font-size: 1em;
+  font-family: inherit;
+  background: rgba(255,255,255,0.06);
+  border: 2px solid #0ff;
+  border-radius: 6px;
+  color: #fff;
+  width: 240px;
+  text-align: center;
+}
+#nameInput:focus { outline: none; background: rgba(255,255,255,0.12); }
+
+.subtext { color: #667; font-size: 13px; margin-top: 14px; max-width: 340px; line-height: 1.5; }
+
+#shipsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  width: min(560px, 90vw);
+  margin-top: 10px;
+}
+.ship-card {
+  background: rgba(255,255,255,0.05);
+  border: 2px solid rgba(255,255,255,0.1);
+  border-radius: 10px;
+  padding: 14px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  transition: all 0.12s;
+  min-height: 130px;
+}
+.ship-card:hover:not(.locked) { border-color: #0ff; background: rgba(0,255,255,0.08); }
+.ship-card.selected { border-color: #0ff; background: rgba(0,255,255,0.15); box-shadow: 0 0 12px rgba(0,255,255,0.4); }
+.ship-card.locked { opacity: 0.5; cursor: not-allowed; }
+.ship-card img { max-width: 64px; max-height: 52px; margin-bottom: 8px; }
+.ship-card .ship-name { font-size: 13px; color: #dde; text-align: center; }
+.ship-card .ship-lock { font-size: 11px; color: #ff8888; margin-top: 4px; text-align: center; }
+.ship-card .ship-tag { font-size: 10px; color: #0ff; margin-top: 4px; }
+.ship-card .lock-icon { font-size: 22px; margin-bottom: 8px; }
+
+/* celular deitado: menus mais compactos para caberem sem rolar */
+@media (max-height: 520px) {
+  .screen { padding: 8px 0; }
+  .screen h1 { font-size: 1.5em; margin: 0 0 8px; }
+  .menu-btn { padding: 7px 16px; margin: 3px 0; font-size: 0.95em; }
+  #mainMenuFooter, .subtext { display: none; }
+  .highscore { margin-top: 4px; font-size: 12px; }
+}
+
+</style>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+
+<div id="hud" class="hidden">
+  <div id="hpDisplay">Vida: </div>
+  <div>Pontos: <span id="scoreDisplay">0</span></div>
+  <div>Fase: <span id="phaseDisplay">1</span></div>
+  <div class="powers" id="powersDisplay"></div>
+  <div class="diff">Dificuldade: <span id="diffDisplay"></span></div>
+</div>
+<div id="bossBarWrap" class="hidden"><div id="bossBarFill"></div></div>
+<div id="bossLabel" class="hidden">CHEFE</div>
+<div id="escHint" class="hidden">ESC = pausar</div>
+
+<div id="mainMenu" class="screen">
+  <h1>BULLET HELL</h1>
+  <button class="menu-btn" data-action="new_game">Novo Jogo</button>
+  <button class="menu-btn" id="loadBtn" data-action="load_game">Carregar Jogo</button>
+  <button class="menu-btn" data-action="ships">Naves</button>
+  <button class="menu-btn" data-action="ranking">Ranking</button>
+  <button class="menu-btn" data-action="options">Opções</button>
+  <button class="menu-btn" data-action="quit">Sair</button>
+  <div class="highscore">Recorde: <span id="highScoreDisplay">0</span></div>
+  <div id="mainMenuFooter">Setas/WASD ou mouse/toque para mover - o tiro é automático<br>Shift para focar (movimento lento e preciso)</div>
+</div>
+
+<div id="pauseMenu" class="screen hidden">
+  <h1>PAUSADO</h1>
+  <button class="menu-btn" data-action="resume">Continuar</button>
+  <button class="menu-btn" data-action="save_exit">Salvar e voltar ao menu</button>
+  <button class="menu-btn" data-action="quit_no_save">Sair sem salvar</button>
+</div>
+
+<div id="optionsMenu" class="screen hidden">
+  <h1>OPÇÕES</h1>
+  <button class="menu-btn" id="diffBtn" data-action="toggle_difficulty"></button>
+  <button class="menu-btn" id="hitboxBtn" data-action="toggle_hitbox"></button>
+  <button class="menu-btn" data-action="back">Voltar</button>
+</div>
+
+<div id="rankingMenu" class="screen hidden">
+  <h1>RANKING</h1>
+  <table class="ranking-table" id="rankingTable"></table>
+  <button class="menu-btn" data-action="back" style="margin-top:20px;">Voltar</button>
+</div>
+
+<div id="shipsMenu" class="screen hidden">
+  <h1>NAVES</h1>
+  <div id="shipsGrid"></div>
+  <div id="shipsProgress" class="subtext"></div>
+  <button class="menu-btn" data-action="back" style="margin-top:16px;">Voltar</button>
+</div>
+
+<div id="enterNameMenu" class="screen hidden">
+  <h1>NOVO RECORDE!</h1>
+  <div id="enterNameStats"></div>
+  <input type="text" id="nameInput" maxlength="12" placeholder="Seu nome">
+  <button class="menu-btn" data-action="submit_name" style="margin-top:16px;">Salvar</button>
+</div>
+
+<div id="phaseCompleteMenu" class="screen hidden">
+  <h1 id="phaseCompleteTitle">FASE COMPLETA</h1>
+  <div id="phaseCompleteStats"></div>
+  <button class="menu-btn" data-action="next_phase" style="margin-top:20px;">Continuar</button>
+</div>
+
+<div id="victoryMenu" class="screen hidden">
+  <h1>VOCÊ VENCEU!</h1>
+  <div id="victoryStats"></div>
+  <button class="menu-btn" data-action="back_to_menu" style="margin-top:20px;">Voltar ao Menu</button>
+</div>
+
+<div id="gameOverMenu" class="screen hidden">
+  <h1>VOCÊ FOI ATINGIDO</h1>
+  <div id="gameOverStats"></div>
+  <button class="menu-btn" data-action="back_to_menu" style="margin-top:20px;">Voltar ao Menu</button>
+</div>
+
+<script>
+// Constantes globais do jogo.
+const MAX_HP = 3;
+const MAX_SHOT_LEVEL = 2;
+const MAX_FIRE_LEVEL = 4;
+const MAX_SHIELD = 3;
+const RANKING_SIZE = 5;
+const BOSS_POINTS = 500;
+
+const DIFFICULTIES = ['Facil', 'Normal', 'Dificil'];
+// Cada nível muda vários aspectos do jogo (não só a velocidade dos tiros).
+const DIFF = {
+  Facil:   { hp: 0.7, bossHp: 0.7, bullet: 0.8, fire: 0.7, count: 0.75, bossRate: 0.75, spawn: 1.25, waveN: 0.8, kamiSpeed: 0.8, kamiTurn: 1.1, drop: 0.26, gap: 150 },
+  Normal:  { hp: 1.0, bossHp: 1.0, bullet: 1.0, fire: 1.0, count: 1.0, bossRate: 1.0, spawn: 1.0, waveN: 1.0, kamiSpeed: 1.0, kamiTurn: 1.7, drop: 0.18, gap: 120 },
+  Dificil: { hp: 1.6, bossHp: 1.6, bullet: 1.3, fire: 1.6, count: 1.4, bossRate: 1.45, spawn: 0.7, waveN: 1.35, kamiSpeed: 1.3, kamiTurn: 2.8, drop: 0.10, gap: 95 },
+};
+
+const POWERUPS = {
+  spread:    { color: '#ffaa33', letter: 'S' },
+  rapidfire: { color: '#ffee55', letter: 'R' },
+  life:      { color: '#ff5577', letter: '+' },
+  shield:    { color: '#55ccff', letter: 'E' },
+};
+const POWERUP_TYPES = Object.keys(POWERUPS);
+
+const STORAGE_KEYS = {
+  save: 'bullet_hell_save_v3',
+  settings: 'bullet_hell_settings_v3',
+  ranking: 'bullet_hell_ranking_v3',
+};
+
+</script>
+<script>
+// Definição das fases (só dados). Os chefes são classes em entities/bosses/.
+const PHASES = [
+  {
+    name: 'Fase 1 - Vanguarda',
+    waves: [
+      { type: 'drifter', count: 4, hp: 3, interval: 0.5 },
+      { type: 'diver', count: 5, hp: 2, interval: 0.35 },
+    ],
+    boss: { kind: 'sentinel', hp: 45 },
+  },
+  {
+    name: 'Fase 2 - Enxame',
+    waves: [
+      { type: 'diver', count: 6, hp: 3, interval: 0.3 },
+      { type: 'shooter', count: 3, hp: 6, interval: 0.9 },
+      { type: 'drifter', count: 5, hp: 4, interval: 0.4 },
+      { type: 'diver', count: 6, hp: 3, interval: 0.28 },
+    ],
+    boss: { kind: 'spiral', hp: 85 },
+  },
+  {
+    name: 'Fase 3 - Tempestade',
+    waves: [
+      { type: 'kamikaze', count: 5, hp: 1, interval: 0.4 },
+      { type: 'drifter', count: 6, hp: 5, interval: 0.35 },
+      { type: 'shooter', count: 4, hp: 7, interval: 0.7 },
+      { type: 'diver', count: 8, hp: 4, interval: 0.22 },
+      { type: 'kamikaze', count: 6, hp: 1, interval: 0.3 },
+    ],
+    boss: { kind: 'core', hp: 140 },
+  },
+  {
+    name: 'Fase 4 - Corredor de Fogo',
+    waves: [
+      { type: 'shooter', count: 5, hp: 8, interval: 0.6 },
+      { type: 'kamikaze', count: 8, hp: 1, interval: 0.25 },
+      { type: 'drifter', count: 7, hp: 6, interval: 0.3 },
+      { type: 'diver', count: 9, hp: 5, interval: 0.2 },
+    ],
+    boss: { kind: 'colossus', hp: 190 },
+  },
+  {
+    name: 'Fase 5 - Abismo Estelar',
+    waves: [
+      { type: 'diver', count: 10, hp: 5, interval: 0.18 },
+      { type: 'shooter', count: 6, hp: 9, interval: 0.55 },
+      { type: 'kamikaze', count: 10, hp: 2, interval: 0.22 },
+      { type: 'drifter', count: 8, hp: 7, interval: 0.28 },
+      { type: 'shooter', count: 5, hp: 9, interval: 0.5 },
+    ],
+    boss: { kind: 'herald', hp: 240 },
+  },
+  {
+    name: 'Fase 6 - Última Barreira',
+    waves: [
+      { type: 'kamikaze', count: 12, hp: 2, interval: 0.2 },
+      { type: 'shooter', count: 8, hp: 10, interval: 0.45 },
+      { type: 'diver', count: 12, hp: 6, interval: 0.16 },
+      { type: 'drifter', count: 10, hp: 8, interval: 0.25 },
+      { type: 'shooter', count: 8, hp: 10, interval: 0.4 },
+      { type: 'kamikaze', count: 10, hp: 2, interval: 0.18 },
+    ],
+    boss: { kind: 'singularity', hp: 320 },
+  },
+];
+
+</script>
+<script>
+// Dados das naves (sprites PNG embutidos em base64, sem arquivos externos).
+// unlockPct = % da pontuação máxima teórica necessária para desbloquear.
+const SHIP_DEFS = [
+  { id: 'plane', name: 'Nave Padrão', unlockPct: 0, secret: false, w: 35, h: 44,
+    src: 'data:image/png;base64,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' },
+  { id: 'apache', name: 'Apache', unlockPct: 15, secret: false, w: 41, h: 46,
+    src: 'data:image/png;base64,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' },
+  { id: 'caca_estelar', name: 'Caça Estelar', unlockPct: 30, secret: false, w: 46, h: 35,
+    src: 'data:image/png;base64,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' },
+  { id: 'foguete', name: 'Foguete', unlockPct: 45, secret: false, w: 22, h: 46,
+    src: 'data:image/png;base64,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' },
+  { id: 'interceptor_circular', name: 'Interceptor Circular', unlockPct: 60, secret: false, w: 46, h: 20,
+    src: 'data:image/png;base64,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' },
+  { id: 'cargueiro', name: 'Cargueiro', unlockPct: 75, secret: false, w: 28, h: 46,
+    src: 'data:image/png;base64,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' },
+  { id: 'disco_voador', name: 'Disco Voador', unlockPct: 90, secret: true, w: 46, h: 17,
+    src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAC4AAAARCAYAAACilZ5PAAAINklEQVR4nKWUa2xcxRXH/2fm7t27L6/f78SxE8eJnUfBJji0yEakEWkaoX5YCVSgIASRECpQIaAVxV4a2vJoUauqVYlSXqqg5EMLaQqkjuIlkFqJDcGOTfyI7fi58fq13t27u/femekHDC2RqEo40nw7c87v/z9nhvD1ghEjqaQCgG0BdyCUX13d7CstrTVygh4AyKzE06lodHhxbKwrkU0cBtBLjKCkYgDklTamrwMNIgmligrzS56s2b17b/WN31ZFW7eveIpLstxwCwAQmSxPz11yx/o+zhk7/k8aPXbs6PzipSdAFIO6cvgrBf8Mum79Vc2vNT/8SPHG7+y9mHVskJlWuaRSXmIZADCVNJYV+ZTXQ27NhaF/HK3qeu6ZuQsfdd0KosErhb8ScEJbGyEczt9wzXXv7PndH/0FdRtn49Mz/nKfZ6GxqGAiX9eyBCgAUAAtWo67J7awdiaVLghWlCcXBofK3r5/f3LkzKmb0Na2iHBYYTX//w32ValDoRDDk2GZn1v48I77Hygr2lQ3szQ5lbMmGJjfXVEyFOCanbahmTZcpg1X2oYW4Jq9u6JkaE0wML80OZVTtKluZsf9D5Tl5xY+jCfDMhQKfWWO/+24UtTW3k4NDQ3U399PnZ2diEQiAkDOll17IvsOveSIrGWBMXZDScFAse42LSE5MfYF95SUpHMm5qys98SlhXpIKblb14/cfad2ruPtFgArLS0tvLW1FQ0NDaq/v1+F29sViL50CtrlQtraFAHtLBwOCxCp8GUj9Pp8KC0pWZNbVRNwB4LRhBnVPJpmezm3HQW6HBoAiDHlKJCXc1tnzEnbtssbCGZzq2ryampq1kQvXToXiUScSCTyn0vh8CpPGwfaZThMX1gn7VNjFbW2tvJIJOKsJki34cb42Livp29w7YULoxvHR4Y3CMep8vpzKqfHRiuGzJQBKMWIVEYIfdlxjCqPtpIW0OgysQogg0NELcfICKEzIgkoZZsp45vNLYcqqmumzeTKFNe0i+s21I6sX18z1Li1bmJd9bpUOBx2gDAAoKWlRevs7BREpCgUCvHDhw+LVQHai6++vmN4cGgXI9aUSKa2cI1X+PwB3e8LwPB64NJ1eHU3Xjr8WnrbL57p9ft8ynYcnqvryV1lhecNxkRGgCv56RoSgzI4REZK3jE7v2nZsvwuTRPJVIp6f/zItjtDt3pMKwvbspAx00imEkglE5ZwxHTA7zsnleyurdvYcdftt5wmIgcAQqEQp1Xg4gM///W9iZXE9zRd/0ZZeTnzen3w+LzQXTo0zSUZYxIKENIhr9+PjiNv8lPCGdv39C+n5y+M64pzFnTrqfpgYKrCayTcGnMAIOtIbdrMBAbiicp41vKRELJw/TrryKOPVVzHtepd+24WZjIJzjQFAqSUzHFsZtkW0ikTppnC7MyMdCzrbCAn8NfHf/KjF4hojl5++Y2dvef6XqmqrtlQVFQMt2GAce4oKclxHCalhFLq80dMRFBKwePxqBcPvSCTTU3DrT98aD6zuMDNRMIFRvDretrLeRYATCHcScvyQCp4AwHbyC8Qnb99vtDf3V171933snQ6TZ/V/K8eijEGTdMkMaakEFo2k0EsNoeLY6Mj27ZsvYP23/dQsvGaZl95eYVjmikmpWSfARJ9yaejFIgxcM7w+qsvY8zrnbr6nnuipZsbspwI2XRGk1IQADDGldtjOEIpRD/pd3948GBptWlW3nL7DyCEhJIS+JI+SqnPBTHGpNfrkzMz01rPma6UpuvukXQyuV06NtddLmk7jpRSME0jSKEgFX1ad/UoqUBEkEKAlMKdd+/H6Q9OVr731FPFvfnBpWBDfTy4bkPaU1DgAEBqYUGLj17wrAwMBH1Ly3l7m3bo137reqRSKUilVs1R4IwgpYLCqvuMQIyghAJnXLo0TUnH5ulkErruHiGlVNF9jx94xnDpd9StWcvy8nLBNQ9WEll4PS6lu6QSQhLZRNIWYB4OW9rgXINJBEiJAp9fiWyaRofG0D8wjER6WWWySakYIYd7WKE/SOvr67Cmtgaa4VWxRII0zmFIASkFiLmRMgUMg8PFHcW5plRGMmE70AMeZKw0lpeXMTg5ITO29crvDzz+iEZEyYG9+7JzefnLb8UXj0jmva4k36ptvWpETMzX82XeRDluDf8S3Srqm5e7rOtRlluKeCJOlW++AaEbtLhnH3SXX1VXc9zYGMP0yk4SxnbuEg56RB8mfLPKt1QIzt1YiUVRffRvKpObr1J7b4aXG8qMn8emwFuYSTYxy7OTsvEE9fA+LPjjorQnwKUphoWdOXVzLLqveGkxS0RJ9uDWxs21bm1/SzKef/WZjoPPP/fEloaK7teb9zi8PKdr+dTJU2dOHH83NrE2RuJGg78/eJIPfjLMB7veZzdEp9i1o4M02d9Ls/MrxBPv0batA8RTxzE5E8P05AS6qRcTm2P08dxZWlpKUPSjbmqNTlLjyHl2rvs06z03yFcuneA7v2vxYqObOt7piHV1RbrH185mcZOff+I7/9SzT7dv2dT13gstyXh+rVvb/+DWxs1asK/n7N9z/WG3ruX+LJbsvY3I+tVjzT898SbkzKzzxsE/HDg6/KeTeY8O/fm2+OjC9rJ4Rd/4wkAF9xhVHZXVvqTHUzOxvAK2cMozLI1Kl78Jx884WEodBxcCeRU6jEQAiQ/ncTbwwZQCpY9t3IY0p9FlM5XC4uC4KihZePcv41uWUpXHbvr+Y0dD1wcW9xy6Y3/motk8eHrwWSKy6uvre9d4vb/JWs5ysK/n7L8B++QgPMZeAc8AAAAASUVORK5CYII=' },
+];
+
+</script>
+<script>
+// Classe base de tudo que existe na tela.
+const FAR = 1e9;
+
+class Entity {
+  // margens além da tela antes de ser descartada: [esq, dir, topo, base]
+  static BOUNDS = [40, 40, 40, 40];
+
+  constructor(x, y, r) { this.x = x; this.y = y; this.r = r; }
+
+  distanceTo(o) { return Math.hypot(this.x - o.x, this.y - o.y); }
+  touches(o, extra = 0) { return this.distanceTo(o) < this.r + o.r + extra; }
+  // colisão com o jogador usa a hitbox pequena dele (hitR)
+  hurts(player, extra = 0) { return this.distanceTo(player) < this.r + player.hitR + extra; }
+
+  offscreen(game) {
+    const [l, r, t, b] = this.constructor.BOUNDS;
+    return this.x < -l || this.x > game.width + r || this.y < -t || this.y > game.height + b;
+  }
+
+  update(dt, game) {}
+  draw(ctx) {}
+}
+
+</script>
+<script>
+// Balas: Bullet (base) -> EnemyBullet / PlayerBullet.
+class Bullet extends Entity {
+  static COLOR = '#ffffff';
+  static GLOW = 8;
+
+  constructor(x, y, vx, vy, r, color) {
+    super(x, y, r);
+    this.vx = vx; this.vy = vy;
+    this.color = color || this.constructor.COLOR;
+  }
+  update(dt, game) {
+    this.x += this.vx * dt * 60;
+    this.y += this.vy * dt * 60;
+  }
+  draw(ctx) {
+    ctx.save();
+    ctx.shadowColor = this.color; ctx.shadowBlur = this.constructor.GLOW; ctx.fillStyle = this.color;
+    ctx.beginPath(); ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+}
+
+// Pode ondular (wavy) ou perseguir o jogador por um tempo (homing).
+class EnemyBullet extends Bullet {
+  constructor(x, y, vx, vy, r, color, opts = {}) {
+    super(x, y, vx, vy, r, color);
+    this.born = opts.born || 0;
+    this.wavy = !!opts.wavy;
+    this.phase = Math.random() * Math.PI * 2;
+    this.homing = !!opts.homing;
+    this.hlife = opts.hlife || 0;
+    this.hturn = opts.hturn || 0;
+  }
+  update(dt, game) {
+    if (this.wavy) this.y += Math.sin((game.elapsed - this.born) * 3 + this.phase) * 1.3;
+    if (this.homing && game.elapsed - this.born < this.hlife) this._steer(dt, game.player);
+    super.update(dt, game);
+  }
+  _steer(dt, target) {
+    const speed = Math.hypot(this.vx, this.vy);
+    const cur = Math.atan2(this.vy, this.vx);
+    let diff = Math.atan2(target.y - this.y, target.x - this.x) - cur;
+    diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+    const step = this.hturn * dt;
+    const next = cur + Math.max(-step, Math.min(step, diff));
+    this.vx = Math.cos(next) * speed; this.vy = Math.sin(next) * speed;
+  }
+}
+
+class PlayerBullet extends Bullet {
+  static COLOR = '#aaffff';
+  static GLOW = 6;
+  static BOUNDS = [20, 20, 20, FAR];   // só some ao sair por cima/lados
+  constructor(x, y, vx = 0, vy = -9) { super(x, y, vx, vy, 4); }
+}
+
+</script>
+<script>
+// Partículas (explosões, faíscas).
+class Particle extends Entity {
+  constructor(x, y, vx, vy, color, life = 0.6) {
+    super(x, y, 2.5);
+    this.vx = vx; this.vy = vy; this.color = color; this.life = life;
+  }
+  // Cria `count` partículas saindo em todas as direções. speed = [min, max].
+  static burst(x, y, count, color, { speed = [1, 4], life = 0.6 } = {}) {
+    const out = [];
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const s = speed[0] + Math.random() * (speed[1] - speed[0]);
+      out.push(new Particle(x, y, Math.cos(a) * s, Math.sin(a) * s, color, life));
+    }
+    return out;
+  }
+  get dead() { return this.life <= 0; }
+  update(dt, game) {
+    this.x += this.vx; this.y += this.vy;
+    this.vx *= 0.94; this.vy *= 0.94;
+    this.life -= dt;
+  }
+  draw(ctx) {
+    ctx.globalAlpha = Math.max(this.life, 0);
+    ctx.fillStyle = this.color;
+    ctx.beginPath(); ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+}
+
+</script>
+<script>
+// Itens que caem dos inimigos.
+class PowerUp extends Entity {
+  static BOUNDS = [FAR, FAR, FAR, 30];
+  constructor(x, y, kind) {
+    super(x, y, 10);
+    this.vy = 1.4; this.kind = kind;
+  }
+  update(dt, game) { this.y += this.vy * dt * 60; }
+  draw(ctx) {
+    const { color, letter } = POWERUPS[this.kind];
+    ctx.save();
+    ctx.shadowColor = color; ctx.shadowBlur = 10; ctx.fillStyle = color;
+    ctx.beginPath(); ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#000'; ctx.font = 'bold 11px Courier New';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(letter, this.x, this.y + 1);
+    ctx.restore();
+  }
+}
+
+</script>
+<script>
+// Jogador e padrões de tiro.
+// nível de tiro -> lista de [dx, dy, vx, vy]
+const SHOT_PATTERNS = [
+  [[-8, 0, 0, -9], [8, 0, 0, -9]],
+  [[-9, 0, -0.6, -9], [0, -4, 0, -9.2], [9, 0, 0.6, -9]],
+  [[-12, 0, -1.4, -8.6], [-6, -2, -0.5, -9], [0, -4, 0, -9.3], [6, -2, 0.5, -9], [12, 0, 1.4, -8.6]],
+];
+
+class Player extends Entity {
+  constructor(game, hp = MAX_HP) {
+    super(game.width / 2, game.height * 0.82, 16);
+    this.hitR = 3;
+    this.speed = 4.2;
+    this.focusSpeed = 2;
+    this.hp = hp;
+    this.invuln = 0;
+  }
+
+  // input.mode: 'keyboard' | 'mouse' | null — teclado e mouse nunca disputam o controle
+  // (evita o "puxão" de volta pra posição antiga do mouse).
+  update(dt, game, input) {
+    const keys = input.keys;
+    const focus = !!keys['shift'];
+    const spd = (focus ? this.focusSpeed : this.speed) * dt * 60;
+
+    if (input.mode === 'keyboard') {
+      const dx = ((keys['arrowright'] || keys['d']) ? 1 : 0) - ((keys['arrowleft'] || keys['a']) ? 1 : 0);
+      const dy = ((keys['arrowdown'] || keys['s']) ? 1 : 0) - ((keys['arrowup'] || keys['w']) ? 1 : 0);
+      const len = Math.hypot(dx, dy);
+      if (len) { this.x += dx / len * spd; this.y += dy / len * spd; }
+    } else if (input.mode === 'mouse' && input.mouse.active) {
+      const mdx = input.mouse.x - this.x, mdy = input.mouse.y - this.y;
+      const dist = Math.hypot(mdx, mdy);
+      const step = spd * (input.touchActive ? 1.4 : 1);
+      if (dist > step) { this.x += mdx / dist * step; this.y += mdy / dist * step; }
+      else { this.x = input.mouse.x; this.y = input.mouse.y; }
+    }
+
+    this.x = Math.max(this.r, Math.min(game.width - this.r, this.x));
+    this.y = Math.max(this.r, Math.min(game.height - this.r, this.y));
+    this.invuln = Math.max(0, this.invuln - dt);
+    return focus;
+  }
+
+  shoot(shotLevel) {
+    const baseY = this.y - 14;
+    return SHOT_PATTERNS[shotLevel].map(([dx, dy, vx, vy]) => new PlayerBullet(this.x + dx, baseY + dy, vx, vy));
+  }
+
+  draw(ctx, game, focus, showHitbox, shieldCharges, ship) {
+    if (shieldCharges > 0) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(85,204,255,0.7)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(this.x, this.y, this.r + 6 + shieldCharges, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+    }
+    if (this.invuln > 0 && Math.floor(game.elapsed * 12) % 2 === 0) return; // piscando
+    ctx.save();
+    if (ship.loaded) {
+      ctx.shadowColor = 'rgba(0,255,255,0.6)'; ctx.shadowBlur = 10;
+      ctx.drawImage(ship.img, this.x - ship.w / 2, this.y - ship.h / 2, ship.w, ship.h);
+    } else {
+      ctx.shadowColor = '#0ff'; ctx.shadowBlur = 15; ctx.fillStyle = '#0ff';
+      ctx.beginPath(); ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2); ctx.fill();
+    }
+    if (focus || showHitbox) {
+      ctx.shadowBlur = 0; ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(this.x, this.y, this.hitR, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+</script>
+<script>
+// Padrões de bala reutilizáveis. `game` fornece a lista de balas e o tempo.
+const Patterns = {
+  ring(game, cx, cy, count, speed, color, radius = 5) {
+    const offset = Math.random() * Math.PI * 2;
+    for (let i = 0; i < count; i++) {
+      const a = offset + (i / count) * Math.PI * 2;
+      game.enemyBullets.push(new EnemyBullet(cx, cy, Math.cos(a) * speed, Math.sin(a) * speed, radius, color, { born: game.elapsed }));
+    }
+  },
+  aimed(game, cx, cy, count, spread, speed, color) {
+    const base = Math.atan2(game.player.y - cy, game.player.x - cx);
+    for (let i = 0; i < count; i++) {
+      const a = base + (i - (count - 1) / 2) * spread;
+      game.enemyBullets.push(new EnemyBullet(cx, cy, Math.cos(a) * speed, Math.sin(a) * speed, 5, color, { born: game.elapsed }));
+    }
+  },
+};
+
+</script>
+<script>
+// Inimigos comuns: Enemy (base) -> Descender (Drifter, Shooter), Diver, Kamikaze.
+class Enemy extends Entity {
+  static BOUNDS = [60, 60, 120, 40];
+  static POINTS = 0;
+  static RADIUS = 10;
+  static COLOR = '#ffffff';
+  static DIES_ON_CONTACT = false;
+
+  constructor(hp, game) {
+    const C = new.target;
+    super(0, 0, C.RADIUS);
+    this.hp = this.maxHp = Math.max(1, Math.round(hp * game.d.hp));
+    this.color = C.COLOR;
+    this.points = C.POINTS;
+    this.fireTimer = Math.random();
+    this.fireInterval = 999;
+  }
+
+  // Retorna true se morreu.
+  takeHit(damage = 1) { this.hp -= damage; return this.hp <= 0; }
+
+  update(dt, game) { this.fireTimer += dt; }
+
+  tryFire(game) {
+    if (this.fireTimer > this.fireInterval) {
+      this.fireTimer = 0;
+      this.shoot(game);
+    }
+  }
+  shoot(game) {}
+
+  draw(ctx) {
+    ctx.save();
+    ctx.shadowColor = this.color; ctx.shadowBlur = 10; ctx.fillStyle = this.color;
+    this.drawBody(ctx);
+    ctx.restore();
+    if (this.maxHp > 1) {
+      const w = this.r * 2;
+      ctx.fillStyle = 'rgba(255,255,255,0.15)';
+      ctx.fillRect(this.x - w / 2, this.y - this.r - 8, w, 3);
+      ctx.fillStyle = '#88ff88';
+      ctx.fillRect(this.x - w / 2, this.y - this.r - 8, w * Math.max(this.hp, 0) / this.maxHp, 3);
+    }
+  }
+  drawBody(ctx) {
+    ctx.beginPath(); ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+// Entra por cima, desce até targetY e fica parado atirando.
+class Descender extends Enemy {
+  static VY = 1.0;
+  static TARGET_Y = [90, 210];
+  static X_MARGIN = 40;
+  static FIRE = [1.4, 2.0];
+
+  constructor(hp, game) {
+    super(hp, game);
+    const C = new.target;
+    this.x = C.X_MARGIN + Math.random() * (game.width - 2 * C.X_MARGIN);
+    this.y = -30;
+    this.targetY = C.TARGET_Y[0] + Math.random() * (C.TARGET_Y[1] - C.TARGET_Y[0]);
+    this.fireInterval = (C.FIRE[0] + Math.random() * (C.FIRE[1] - C.FIRE[0])) / game.d.fire;
+  }
+  update(dt, game) {
+    if (this.y < this.targetY) this.y += this.constructor.VY;
+    super.update(dt, game);
+  }
+}
+
+class Drifter extends Descender {
+  static POINTS = 80; static RADIUS = 14; static COLOR = '#ff8855';
+  static VY = 1.6; static TARGET_Y = [90, 210]; static FIRE = [1.4, 2.0];
+  shoot(game) {
+    const d = game.d;
+    Patterns.aimed(game, this.x, this.y, d.count > 1.2 ? 2 : 1, 0.18, 3.2 * d.bullet, '#ff6699');
+  }
+}
+
+class Shooter extends Descender {
+  static POINTS = 100; static RADIUS = 16; static COLOR = '#cc66ff';
+  static VY = 1.2; static TARGET_Y = [70, 160]; static FIRE = [1.6, 2.0]; static X_MARGIN = 60;
+  shoot(game) {
+    const d = game.d;
+    Patterns.ring(game, this.x, this.y, Math.round(10 * d.count), 1.8 * d.bullet, '#cc88ff');
+  }
+  drawBody(ctx) {
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const px = this.x + Math.cos(a) * this.r, py = this.y + Math.sin(a) * this.r;
+      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
+    ctx.closePath(); ctx.fill();
+  }
+}
+
+// Cruza a tela de lado, ondulando, e atira mirado.
+class Diver extends Enemy {
+  static POINTS = 60; static RADIUS = 11; static COLOR = '#66ccff';
+  constructor(hp, game) {
+    super(hp, game);
+    const fromLeft = Math.random() < 0.5;
+    this.x = fromLeft ? -20 : game.width + 20;
+    this.y = 60 + Math.random() * 140;
+    this.vx = (fromLeft ? 1 : -1) * (2.2 + Math.random() * 0.6) * (0.85 + 0.15 * game.d.bullet);
+    this.phase = Math.random() * Math.PI * 2;
+    this.fireInterval = (1.0 + Math.random() * 0.5) / game.d.fire;
+  }
+  update(dt, game) {
+    this.x += this.vx;
+    this.y += Math.sin(game.elapsed * 2 + this.phase) * 1.1;
+    super.update(dt, game);
+  }
+  shoot(game) {
+    const d = game.d;
+    Patterns.aimed(game, this.x, this.y, d.count > 1.2 ? 2 : 1, 0.18, 3.2 * d.bullet, '#ff6699');
+  }
+}
+
+// Persegue o jogador em tempo real, com limite de curva (dá pra desviar).
+class Kamikaze extends Enemy {
+  static POINTS = 40; static RADIUS = 9; static COLOR = '#ff4466';
+  static DIES_ON_CONTACT = true;
+  static HOMING_TIME = 3.8; static WARN_TIME = 0.6;
+
+  constructor(hp, game) {
+    super(hp, game);
+    const C = new.target;
+    this.x = 20 + Math.random() * (game.width - 40);
+    this.y = -20;
+    this.ang = Math.PI / 2;
+    this.speed = (3.2 + Math.random() * 0.5) * game.d.kamiSpeed;
+    this.turn = game.d.kamiTurn;
+    this.homing = C.HOMING_TIME;
+    this.warn = C.WARN_TIME;
+  }
+  update(dt, game) {
+    this.warn -= dt;
+    if (this.homing > 0) {
+      this.homing -= dt;
+      const want = Math.atan2(game.player.y - this.y, game.player.x - this.x);
+      const diff = Math.atan2(Math.sin(want - this.ang), Math.cos(want - this.ang));
+      const step = this.turn * dt;
+      this.ang += Math.max(-step, Math.min(step, diff));
+    }
+    const spd = this.speed * (this.warn > 0 ? 0.35 : 1) * dt * 60;
+    this.x += Math.cos(this.ang) * spd;
+    this.y += Math.sin(this.ang) * spd;
+  }
+  drawBody(ctx) {
+    if (this.warn > 0 && Math.floor(this.warn * 14) % 2 === 0) { ctx.fillStyle = '#ffffff'; ctx.shadowColor = '#ffffff'; }
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.ang + Math.PI / 2);
+    ctx.beginPath();
+    ctx.moveTo(0, -this.r * 1.3);
+    ctx.lineTo(-this.r * 0.9, this.r);
+    ctx.lineTo(0, this.r * 0.5);
+    ctx.lineTo(this.r * 0.9, this.r);
+    ctx.closePath(); ctx.fill();
+  }
+}
+
+const ENEMY_TYPES = { drifter: Drifter, diver: Diver, shooter: Shooter, kamikaze: Kamikaze };
+function createEnemy(kind, hp, game) { return new ENEMY_TYPES[kind](hp, game); }
+
+</script>
+<script>
+// Efeitos temporários gerados pelos chefes (rajadas, paredes, avisos de feixe).
+// Contrato: update(dt, boss, game) -> true enquanto estiver ativo; draw(ctx, game) opcional.
+class BossEffect {
+  update(dt, boss, game) { return false; }
+  draw(ctx, game) {}
+}
+
+// Rajada contínua de braços girando saindo do chefe.
+class FlowerStream extends BossEffect {
+  constructor(arms, step, speed, color, duration = 2.2) {
+    super();
+    Object.assign(this, { arms, step, speed, color, timeLeft: duration, acc: 0, angle: Math.random() * 6.28 });
+  }
+  update(dt, boss, game) {
+    this.timeLeft -= dt; this.acc += dt;
+    while (this.acc >= this.step) {
+      this.acc -= this.step; this.angle += 0.28;
+      for (let k = 0; k < this.arms; k++) {
+        const a = this.angle + k * Math.PI * 2 / this.arms;
+        game.enemyBullets.push(new EnemyBullet(boss.x, boss.y, Math.cos(a) * this.speed, Math.sin(a) * this.speed, 4, this.color, { born: game.elapsed }));
+      }
+    }
+    return this.timeLeft > 0;
+  }
+}
+
+// Linha de balas descendo com uma abertura (após `delay` segundos).
+class WallStream extends BossEffect {
+  constructor(delay = 0) { super(); this.delay = delay; }
+  update(dt, boss, game) {
+    if (this.delay > 0) { this.delay -= dt; return true; }
+    const gap = game.d.gap;
+    const gx = 20 + Math.random() * (game.width - gap - 40);
+    for (let x = 12; x < game.width; x += 30) {
+      if (x > gx && x < gx + gap) continue;
+      game.enemyBullets.push(new EnemyBullet(x, -10, 0, 2.4 * game.d.bullet, 6, boss.color2, { born: game.elapsed }));
+    }
+    return false;
+  }
+}
+
+// Linha vermelha que pisca e depois vira uma coluna rápida de balas.
+class BeamWarning extends BossEffect {
+  constructor(x, time = 0.9) { super(); this.x = x; this.timeLeft = time; }
+  update(dt, boss, game) {
+    this.timeLeft -= dt;
+    if (this.timeLeft > 0) return true;
+    for (let k = 0; k < 16; k++) {
+      game.enemyBullets.push(new EnemyBullet(this.x, -10 - k * 20, 0, 7 * game.d.bullet, 4, '#ffffff', { born: game.elapsed }));
+    }
+    return false;
+  }
+  draw(ctx, game) {
+    ctx.save();
+    const a = 0.25 + 0.5 * Math.abs(Math.sin(this.timeLeft * 18));
+    ctx.strokeStyle = `rgba(255,80,80,${a})`; ctx.lineWidth = 2 + (0.9 - this.timeLeft) * 6;
+    ctx.beginPath(); ctx.moveTo(this.x, 0); ctx.lineTo(this.x, game.height); ctx.stroke();
+    ctx.restore();
+  }
+}
+
+</script>
+<script>
+// BossAttacks (mixin): biblioteca de ataques reutilizáveis dos chefes.
+// Cada ataque é um método atk_<nome>(game); Boss._runAttacks os encontra pelo nome listado em ATTACKS.
+const BossAttacks = Base => class extends Base {
+  // Quantidade de balas: escala com a dificuldade e com a fúria.
+  n(k, game) { return Math.max(2, Math.round(k * game.d.count) + (this.enraged ? 2 : 0)); }
+
+  spawn(game, x, y, vx, vy, r, color, opts = {}) {
+    game.enemyBullets.push(new EnemyBullet(x, y, vx, vy, r, color, { born: game.elapsed, ...opts }));
+  }
+
+  atk_ring(game) { Patterns.ring(game, this.x, this.y, this.n(16, game), 2.0 * game.d.bullet, this.color); }
+  atk_aimed(game) { Patterns.aimed(game, this.x, this.y, this.n(5, game), 0.16, 3.6 * game.d.bullet, '#ffcc33'); }
+  atk_fan(game) { Patterns.aimed(game, this.x, this.y, this.n(7, game), 0.2, 3.0 * game.d.bullet, this.color2); }
+
+  atk_flower(game) {
+    const arms = (this.enraged ? 4 : 3) + (game.d.count > 1.2 ? 1 : 0);
+    this.effects.push(new FlowerStream(arms, this.enraged ? 0.07 : 0.1, 2.3 * game.d.bullet, this.color2));
+  }
+  atk_rain(game) {
+    const m = this.n(12, game) + 4;
+    for (let i = 0; i < m; i++) {
+      this.spawn(game, (i + Math.random()) / m * game.width, -10, 0, (2 + Math.random() * 1.5) * game.d.bullet, 5, '#ffcc66');
+    }
+  }
+  atk_wall(game) {
+    for (let w = 0; w < (this.enraged ? 2 : 1); w++) this.effects.push(new WallStream(w * 0.9));
+  }
+  atk_beam(game) {
+    const count = Math.max(2, Math.round(2 * game.d.count) + (this.enraged ? 1 : 0));
+    for (let i = 0; i < count; i++) {
+      this.effects.push(new BeamWarning(i === 0 ? game.player.x : 30 + Math.random() * (game.width - 60)));
+    }
+  }
+  atk_homing(game) {
+    const m = Math.max(2, Math.round(3 * game.d.count) + (this.enraged ? 1 : 0));
+    const sp = game.d.bullet;
+    for (let i = 0; i < m; i++) {
+      const a = Math.PI / 2 + (i - (m - 1) / 2) * 0.6;
+      this.spawn(game, this.x, this.y, Math.cos(a) * 1.8 * sp, Math.sin(a) * 1.8 * sp, 8, '#ff66ff',
+        { homing: true, hlife: 3.2, hturn: 1.1 + sp * 0.3 });
+    }
+  }
+};
+
+</script>
+<script>
+// Boss (base): ciclo de vida, fúria, ataques e desenho comuns.
+//
+// Para criar um chefe novo: herde de Boss, defina NAME/RADIUS/RATE/COLOR/COLOR2/ATTACKS,
+// implemente move() e drawBody(), e (se precisar) novos métodos atk_<nome>().
+// Os nomes em ATTACKS são procurados como métodos `atk_<nome>` (biblioteca em boss_attacks.js).
+class Boss extends BossAttacks(Entity) {
+  static NAME = 'Chefe';
+  static RADIUS = 40;
+  static RATE = 1.3;            // segundos entre ataques (dividido pela dificuldade)
+  static COLOR = '#ffffff';
+  static COLOR2 = '#ffffff';
+  static ATTACKS = ['ring'];
+  static BOUNDS = [200, 200, 200, 200];
+
+  constructor(hp, game) {
+    const C = new.target;
+    super(game.width / 2, -60, C.RADIUS);
+    this.name = C.NAME; this.color = C.COLOR; this.color2 = C.COLOR2;
+    this.hp = this.maxHp = hp * game.d.bossHp;
+    this.attackIndex = 0; this.attackTimer = 0; this.moveTimer = 0;
+    this.entering = true; this.enraged = false;
+    this.alpha = 1; this.flash = 0;
+    this.effects = [];
+  }
+
+  // ---------- ciclo de vida ----------
+  takeHit(damage = 1) { this.hp -= damage; return this.hp <= 0; }
+
+  update(dt, game) {
+    if (this.entering) {
+      this.y += 1.6;
+      if (this.y >= 110) { this.y = 110; this.entering = false; }
+      return;
+    }
+    this.moveTimer += dt;
+    this.flash = Math.max(0, this.flash - dt);
+    if (!this.enraged && this.hp <= this.maxHp * 0.5) this._enrage(game);
+    this.move(dt, game);
+    this._runAttacks(dt, game);
+    this.effects = this.effects.filter(fx => fx.update(dt, this, game));
+  }
+
+  _enrage(game) {
+    this.enraged = true; this.flash = 1; this.attackTimer = -0.9;
+    this.effects = [];
+    game.enemyBullets = [];
+    game.particles.push(...Particle.burst(this.x, this.y, 40, '#ff2244', { speed: [2, 6], life: 0.8 }));
+  }
+
+  move(dt, game) {}
+  canAttack() { return true; }
+  // Causa dano por contato (o Arauto invisível não causa).
+  solid() { return this.alpha > 0.5; }
+
+  _runAttacks(dt, game) {
+    this.attackTimer += dt;
+    const interval = this.constructor.RATE / game.d.bossRate * (this.enraged ? 0.72 : 1);
+    if (this.attackTimer > interval && this.canAttack()) {
+      this.attackTimer = 0;
+      const list = this.constructor.ATTACKS;
+      this['atk_' + list[this.attackIndex % list.length]](game);
+      this.attackIndex++;
+    }
+  }
+
+  // ---------- desenho ----------
+  // Subclasses desenham aqui; a origem do ctx já é o centro do chefe.
+  drawBody(ctx, t, angle, main) {
+    ctx.fillStyle = main;
+    ctx.beginPath(); ctx.arc(0, 0, this.r, 0, Math.PI * 2); ctx.fill();
+  }
+
+  draw(ctx, game) {
+    for (const fx of this.effects) fx.draw(ctx, game);
+    ctx.save();
+    ctx.globalAlpha = this.alpha;
+    ctx.translate(this.x, this.y);
+    ctx.shadowColor = this.enraged ? '#ff2244' : this.color;
+    ctx.shadowBlur = this.enraged ? 32 : 20;
+    const angle = Math.atan2(game.player.y - this.y, game.player.x - this.x);
+    const flashing = this.flash > 0 && Math.floor(this.flash * 16) % 2 === 0;
+    this.drawBody(ctx, this.moveTimer, angle, flashing ? '#ffffff' : this.color);
+    ctx.restore();
+  }
+
+  // pequeno helper usado nos corpos
+  circ(ctx, x, y, rad) { ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill(); }
+}
+
+</script>
+<script>
+// Fase 1: losango com um olho que acompanha o jogador.
+class Sentinel extends Boss {
+  static NAME = 'Sentinela'; static RADIUS = 34; static RATE = 1.3;
+  static COLOR = '#44ddff'; static COLOR2 = '#ffffff';
+  static ATTACKS = ['ring', 'aimed', 'fan'];
+
+  move(dt, game) {
+    this.x = game.width / 2 + Math.sin(this.moveTimer * 0.6) * game.width * 0.28;
+    this.y = 110;
+  }
+  drawBody(ctx, t, angle, main) {
+    const r = this.r;
+    ctx.save(); ctx.rotate(Math.PI / 4 + Math.sin(t) * 0.1);
+    ctx.fillStyle = main; ctx.fillRect(-r * 0.78, -r * 0.78, r * 1.56, r * 1.56);
+    ctx.restore();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.ellipse(0, 0, r * 0.62, r * 0.36, 0, 0, Math.PI * 2); ctx.fill();
+    const ix = Math.cos(angle) * r * 0.2, iy = Math.sin(angle) * r * 0.1;
+    ctx.fillStyle = this.enraged ? '#ff2244' : '#004455'; this.circ(ctx, ix, iy, r * 0.2);
+    ctx.fillStyle = '#000'; this.circ(ctx, ix, iy, r * 0.08);
+  }
+}
+
+</script>
+<script>
+// Fase 2: três braços em espiral girando; solta rajadas em flor.
+class SpiralGuardian extends Boss {
+  static NAME = 'Guardiã Espiral'; static RADIUS = 38; static RATE = 1.6;
+  static COLOR = '#ff55dd'; static COLOR2 = '#ffbbee';
+  static ATTACKS = ['flower', 'ring', 'aimed', 'flower'];
+
+  move(dt, game) {
+    const t = this.moveTimer;
+    this.x = game.width / 2 + Math.sin(t * 0.5) * game.width * 0.3;
+    this.y = 110 + Math.sin(t * 1.1) * 18;
+  }
+  drawBody(ctx, t, angle, main) {
+    const r = this.r;
+    ctx.lineCap = 'round'; ctx.strokeStyle = main; ctx.lineWidth = 8;
+    for (let k = 0; k < 3; k++) {
+      ctx.beginPath();
+      for (let s = 0; s <= 1.001; s += 0.05) {
+        const a = t * 1.5 + k * Math.PI * 2 / 3 + s * 2.4;
+        const px = Math.cos(a) * s * r * 1.1, py = Math.sin(a) * s * r * 1.1;
+        s === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+    }
+    ctx.fillStyle = main; this.circ(ctx, 0, 0, r * 0.5);
+    ctx.shadowBlur = 0; ctx.fillStyle = this.color2; this.circ(ctx, 0, 0, r * 0.3);
+    ctx.fillStyle = this.enraged ? '#ff2244' : '#550044';
+    this.circ(ctx, Math.cos(angle) * r * 0.1, Math.sin(angle) * r * 0.1, r * 0.13);
+  }
+}
+
+</script>
+<script>
+// Fase 3: núcleo pulsante com 4 satélites que atiram na direção do jogador.
+class CollapsingCore extends Boss {
+  static NAME = 'Núcleo Colapsante'; static RADIUS = 44; static RATE = 1.2;
+  static COLOR = '#ff9933'; static COLOR2 = '#ffee88';
+  static ATTACKS = ['satellites', 'rain', 'ring', 'satellites'];
+
+  move(dt, game) {
+    const t = this.moveTimer;
+    this.x = game.width / 2 + Math.cos(t * 0.7) * game.width * 0.25;
+    this.y = 125 + Math.sin(t * 0.7) * 45;
+  }
+  satellitePositions() {
+    return [0, 1, 2, 3].map(k => {
+      const a = this.moveTimer * 1.6 + k * Math.PI / 2;
+      return { x: this.x + Math.cos(a) * this.r * 1.5, y: this.y + Math.sin(a) * this.r * 1.5 };
+    });
+  }
+  atk_satellites(game) {
+    for (const s of this.satellitePositions()) {
+      Patterns.aimed(game, s.x, s.y, this.enraged ? 3 : 1, 0.2, 3.4 * game.d.bullet, '#ffaa33');
+    }
+  }
+  drawBody(ctx, t, angle, main) {
+    const r = this.r;
+    ctx.fillStyle = main; this.circ(ctx, 0, 0, r * (0.72 + Math.sin(t * 5) * 0.06));
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = this.color2; this.circ(ctx, 0, 0, r * (0.36 + Math.sin(t * 5 + 1) * 0.05));
+    ctx.strokeStyle = 'rgba(255,200,120,0.5)'; ctx.lineWidth = 2;
+    for (let k = 0; k < 4; k++) {
+      const a = t * 1.6 + k * Math.PI / 2;
+      const sx = Math.cos(a) * r * 1.5, sy = Math.sin(a) * r * 1.5;
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(sx, sy); ctx.stroke();
+      ctx.shadowBlur = 14; ctx.shadowColor = this.color2; ctx.fillStyle = this.color2; this.circ(ctx, sx, sy, 8);
+    }
+  }
+}
+
+</script>
+<script>
+// Fase 4: casco hexagonal blindado; feixes com aviso, paredes com abertura e canhões.
+class ArmoredColossus extends Boss {
+  static NAME = 'Colosso Blindado'; static RADIUS = 48; static RATE = 1.7;
+  static COLOR = '#8fa3b8'; static COLOR2 = '#ff6644';
+  static ATTACKS = ['beam', 'wall', 'cannons', 'beam'];
+
+  move(dt, game) {
+    this.x = game.width / 2 + Math.sin(this.moveTimer * 0.35) * game.width * 0.3;
+    this.y = 105;
+  }
+  atk_cannons(game) {
+    for (const side of [-1, 1]) {
+      Patterns.aimed(game, this.x + side * this.r * 1.05, this.y + 10, this.n(3, game), 0.18, 3.4 * game.d.bullet, this.color2);
+    }
+  }
+  _hexagon(ctx, rx, ry) {
+    ctx.beginPath();
+    for (let k = 0; k < 6; k++) {
+      const a = Math.PI / 6 + k * Math.PI / 3;
+      const px = Math.cos(a) * rx, py = Math.sin(a) * ry;
+      k === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
+    ctx.closePath(); ctx.fill();
+  }
+  drawBody(ctx, t, angle, main) {
+    const r = this.r;
+    ctx.fillStyle = '#556677';
+    ctx.fillRect(-r * 1.25, -r * 0.2, r * 0.35, r * 0.95);
+    ctx.fillRect(r * 0.9, -r * 0.2, r * 0.35, r * 0.95);
+    ctx.fillStyle = main; this._hexagon(ctx, r, r * 0.9);
+    ctx.shadowBlur = 0; ctx.fillStyle = '#3a4756'; this._hexagon(ctx, r * 0.62, r * 0.56);
+    ctx.strokeStyle = '#2a3340'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(-r * 0.8, 0); ctx.lineTo(r * 0.8, 0); ctx.moveTo(0, -r * 0.8); ctx.lineTo(0, r * 0.8); ctx.stroke();
+    ctx.shadowBlur = 16; ctx.shadowColor = this.color2;
+    ctx.fillStyle = this.enraged || Math.sin(t * 6) > 0 ? this.color2 : '#aa3322'; this.circ(ctx, 0, 0, r * 0.2);
+    ctx.fillStyle = this.color2; this.circ(ctx, -r * 1.07, r * 0.75, 5); this.circ(ctx, r * 1.07, r * 0.75, 5);
+  }
+}
+
+</script>
+<script>
+// Fase 5: asas e olho vertical; some, reaparece em outro lugar e solta orbes perseguidores.
+class VoidHerald extends Boss {
+  static NAME = 'Arauto do Vácuo'; static RADIUS = 50; static RATE = 1.3;
+  static COLOR = '#9966ff'; static COLOR2 = '#e0ccff';
+  static ATTACKS = ['blink', 'homing', 'fan', 'blink', 'homing'];
+  static FADE = 0.3;
+
+  constructor(hp, game) {
+    super(hp, game);
+    this.blink = null;          // null ou { phase: 0 (some) | 1 (volta), t }
+    this.targetX = game.width / 2;
+  }
+  canAttack() { return this.blink === null; }
+  atk_blink(game) { this.blink = { phase: 0, t: 0 }; }
+
+  move(dt, game) {
+    if (this.blink) { this._updateBlink(dt, game); return; }
+    const t = this.moveTimer;
+    this.targetX = game.width / 2 + Math.sin(t * 0.4) * game.width * 0.22;
+    this.x += (this.targetX - this.x) * Math.min(1, dt * 1.5);
+    this.y = 110 + Math.sin(t * 0.9) * 15;
+  }
+  _updateBlink(dt, game) {
+    const b = this.blink, fade = VoidHerald.FADE, d = game.d;
+    b.t += dt;
+    if (b.phase === 0) {
+      this.alpha = Math.max(0, 1 - b.t / fade);
+      if (b.t >= fade) {
+        this.blink = { phase: 1, t: 0 };
+        this.targetX = this.x = game.width * (0.15 + Math.random() * 0.7);
+      }
+    } else {
+      this.alpha = Math.min(1, b.t / fade);
+      if (b.t >= fade) {
+        this.alpha = 1; this.blink = null;
+        Patterns.ring(game, this.x, this.y, Math.round((this.enraged ? 20 : 14) * d.count), 2.2 * d.bullet, this.color);
+        Patterns.aimed(game, this.x, this.y, 3, 0.2, 3.6 * d.bullet, this.color2);
+      }
+    }
+  }
+  drawBody(ctx, t, angle, main) {
+    const r = this.r, flap = Math.sin(t * 4) * 0.25;
+    ctx.fillStyle = main;
+    for (const sg of [-1, 1]) {
+      ctx.save(); ctx.scale(sg, 1); ctx.rotate(flap);
+      ctx.beginPath(); ctx.moveTo(r * 0.3, -r * 0.3); ctx.lineTo(r * 1.5, -r * 0.9 + flap * 20); ctx.lineTo(r * 1.1, r * 0.1);
+      ctx.lineTo(r * 1.35, r * 0.7); ctx.lineTo(r * 0.3, r * 0.4); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+    ctx.fillStyle = '#2a1a55'; this.circ(ctx, 0, 0, r * 0.62);
+    ctx.shadowBlur = 0; ctx.fillStyle = main; this.circ(ctx, 0, 0, r * 0.62 * 0.9);
+    ctx.fillStyle = '#1a0f33'; this.circ(ctx, 0, r * 0.05, r * 0.5);
+    ctx.fillStyle = this.enraged ? '#ff2244' : this.color2;
+    ctx.beginPath(); ctx.ellipse(Math.cos(angle) * 4, Math.sin(angle) * 3, r * 0.08, r * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+</script>
+<script>
+// Fase 6 (final): buraco negro com anéis; usa toda a biblioteca de ataques.
+class Singularity extends Boss {
+  static NAME = 'Singularidade'; static RADIUS = 56; static RATE = 1.1;
+  static COLOR = '#ffffff'; static COLOR2 = '#ff4488';
+  static ATTACKS = ['flower', 'homing', 'wall', 'beam', 'ring', 'rain'];
+
+  move(dt, game) {
+    const t = this.moveTimer;
+    this.x = game.width / 2 + Math.sin(t * 0.5) * game.width * 0.3;
+    this.y = 120 + Math.sin(t * 1.0) * 40;      // trajetória em "8"
+  }
+  drawBody(ctx, t, angle, main) {
+    const r = this.r;
+    ctx.save(); ctx.scale(1, 0.35);
+    for (const dir of [1, -1]) {
+      ctx.save(); ctx.rotate(t * 0.8 * dir);
+      ctx.strokeStyle = dir > 0 ? this.color2 : '#ffffff'; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(0, 0, r * 1.35, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+    }
+    ctx.restore();
+    ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 26;
+    ctx.fillStyle = '#000'; this.circ(ctx, 0, 0, r * 0.7);
+    ctx.strokeStyle = this.enraged ? '#ff2244' : '#ffffff'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(0, 0, r * 0.7, 0, Math.PI * 2); ctx.stroke();
+    ctx.shadowBlur = 0; ctx.fillStyle = '#ffffff';
+    for (let k = 0; k < 10; k++) {
+      const a = t * 2 + k * Math.PI / 5, rad = r * (0.95 + 0.1 * Math.sin(t * 3 + k));
+      this.circ(ctx, Math.cos(a) * rad, Math.sin(a) * rad, 2.5);
+    }
+  }
+}
+
+// Liga o campo "kind" das fases a cada classe de chefe.
+const BOSS_TYPES = {
+  sentinel: Sentinel, spiral: SpiralGuardian, core: CollapsingCore,
+  colossus: ArmoredColossus, herald: VoidHerald, singularity: Singularity,
+};
+function createBoss(cfg, game) { return new BOSS_TYPES[cfg.kind](cfg.hp, game); }
+
+</script>
+<script>
+// Pontuação máxima teórica (matando 100% dos inimigos + chefes de todas as fases).
+// Usada para calcular os marcos de desbloqueio das naves como % desse total.
+function computeMaxPossibleScore() {
+  let total = 0;
+  for (const phase of PHASES) {
+    for (const wave of phase.waves) total += ENEMY_TYPES[wave.type].POINTS * wave.count;
+    total += BOSS_POINTS;
+  }
+  return total;
+}
+
+const MAX_POSSIBLE_SCORE = computeMaxPossibleScore();
+
+</script>
+<script>
+// Naves jogáveis (skins). Todas cosméticas: hitbox e gameplay são iguais.
+class Ship {
+  constructor(def) {
+    Object.assign(this, def);
+    this.img = new Image();
+    this.loaded = false;
+    this.img.onload = () => { this.loaded = true; };
+    this.img.src = def.src;
+  }
+  isUnlocked(highScore) {
+    return this.unlockPct === 0 || highScore >= MAX_POSSIBLE_SCORE * this.unlockPct / 100;
+  }
+  pointsNeeded() { return Math.ceil(MAX_POSSIBLE_SCORE * this.unlockPct / 100); }
+}
+
+class ShipRegistry {
+  constructor(defs) { this.list = defs.map(d => new Ship(d)); }
+  get(id) { return this.list.find(s => s.id === id) || this.list[0]; }
+}
+
+const SHIPS = new ShipRegistry(SHIP_DEFS);
+
+</script>
+<script>
+// Salvar/carregar opções, jogo e ranking (localStorage).
+class SaveStore {
+  static DEFAULT_SETTINGS = { difficulty: 'Normal', showHitboxAlways: false, highScore: 0, selectedShip: 'plane' };
+
+  _read(key, fallback) {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch (e) { return fallback; }
+  }
+  _write(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {} }
+
+  loadSettings() { return { ...SaveStore.DEFAULT_SETTINGS, ...this._read(STORAGE_KEYS.settings, {}) }; }
+  saveSettings(s) { this._write(STORAGE_KEYS.settings, s); }
+
+  hasSave() { try { return !!localStorage.getItem(STORAGE_KEYS.save); } catch (e) { return false; } }
+  loadGame() { return this._read(STORAGE_KEYS.save, null); }
+  saveGame(data) { this._write(STORAGE_KEYS.save, data); }
+  deleteSave() { try { localStorage.removeItem(STORAGE_KEYS.save); } catch (e) {} }
+
+  loadRanking() { return this._read(STORAGE_KEYS.ranking, []); }
+  rankingQualifies(score) {
+    const list = this.loadRanking();
+    return list.length < RANKING_SIZE || score > list[list.length - 1].score;
+  }
+  addToRanking(name, score, phaseLabel) {
+    const list = this.loadRanking();
+    list.push({ name: name || 'Jogador', score: Math.floor(score), phase: phaseLabel });
+    list.sort((a, b) => b.score - a.score);
+    const top = list.slice(0, RANKING_SIZE);
+    this._write(STORAGE_KEYS.ranking, top);
+    return top;
+  }
+}
+
+</script>
+<script>
+// Entrada do jogador (teclado, mouse, toque).
+// mode evita que teclado e mouse "briguem" pelo controle:
+//   'keyboard' -> ignora o mouse até ele se mexer de novo; 'mouse' -> segue o cursor/toque.
+class Input {
+  static MOVE_KEYS = ['arrowleft', 'arrowright', 'arrowup', 'arrowdown', 'a', 'd', 'w', 's'];
+
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.keys = {};
+    this.mouse = { x: 0, y: 0, active: false };
+    this.touchActive = false;
+    this.mode = null;
+  }
+
+  reset(player) {
+    this.keys = {};
+    this.mouse = { x: player.x, y: player.y, active: false };
+    this.touchActive = false;
+    this.mode = null;
+  }
+
+  // isPlaying(): função que diz se estamos jogando; onEscape(): chamada ao apertar ESC.
+  bind(isPlaying, onEscape) {
+    window.addEventListener('keydown', e => {
+      const k = e.key.toLowerCase();
+      this.keys[k] = true;
+      if (Input.MOVE_KEYS.includes(k)) this.mode = 'keyboard';
+      if (e.key === 'Escape') onEscape();
+    });
+    window.addEventListener('keyup', e => { this.keys[e.key.toLowerCase()] = false; });
+
+    this.canvas.addEventListener('mousemove', e => {
+      if (!isPlaying()) return;
+      this._point(e.clientX, e.clientY);
+      this.mode = 'mouse';
+    });
+    this.canvas.addEventListener('mouseleave', () => { this.mouse.active = false; });
+
+    const touch = e => {
+      if (!isPlaying()) return;
+      e.preventDefault();
+      const t = e.touches[0];
+      if (t) { this._point(t.clientX, t.clientY); this.touchActive = true; this.mode = 'mouse'; }
+    };
+    this.canvas.addEventListener('touchstart', touch, { passive: false });
+    this.canvas.addEventListener('touchmove', touch, { passive: false });
+    this.canvas.addEventListener('touchend', () => { this.touchActive = false; }, { passive: false });
+  }
+
+  _point(clientX, clientY) {
+    const rect = this.canvas.getBoundingClientRect();
+    const sx = this.canvas.width / rect.width, sy = this.canvas.height / rect.height;   // tela -> campo de jogo
+    this.mouse.x = (clientX - rect.left) * sx;
+    this.mouse.y = (clientY - rect.top) * sy;
+    this.mouse.active = true;
+  }
+}
+
+</script>
+<script>
+// Controla o fluxo de uma fase: ondas de inimigos -> chefe -> fase completa.
+class PhaseRunner {
+  static WAVES = 'waves'; static BOSS = 'boss'; static COMPLETE = 'complete';
+
+  constructor(index = 0) {
+    this.index = index;
+    this.reset();
+  }
+  reset() {
+    this.waveIndex = 0; this.spawned = 0; this.timer = 0;
+    this.state = PhaseRunner.WAVES;
+    this.boss = null;
+  }
+  get data() { return PHASES[this.index]; }
+  get name() { return this.data ? this.data.name : ''; }
+  get isComplete() { return this.state === PhaseRunner.COMPLETE; }
+  get isLast() { return this.index >= PHASES.length - 1; }
+
+  finishBoss() { this.boss = null; this.state = PhaseRunner.COMPLETE; }
+
+  update(dt, game) {
+    if (this.state === PhaseRunner.WAVES) this._updateWaves(dt, game);
+    else if (this.state === PhaseRunner.BOSS && this.boss) this.boss.update(dt, game);
+  }
+
+  _updateWaves(dt, game) {
+    const wave = this.data.waves[this.waveIndex];
+    if (!wave) {
+      this.state = PhaseRunner.BOSS;
+      this.boss = createBoss(this.data.boss, game);
+      return;
+    }
+    const d = game.d;
+    const count = Math.max(1, Math.round(wave.count * d.waveN));
+    this.timer += dt;
+    if (this.spawned < count && this.timer > wave.interval * d.spawn) {
+      this.timer = 0;
+      const enemy = createEnemy(wave.type, wave.hp, game);
+      // a onda inteira vale o mesmo em qualquer dificuldade (mantém os marcos das naves justos)
+      enemy.points = enemy.constructor.POINTS * wave.count / count;
+      game.enemies.push(enemy);
+      this.spawned++;
+    }
+    if (this.spawned >= count && game.enemies.length === 0) {
+      this.waveIndex++; this.spawned = 0; this.timer = 0;
+    }
+  }
+}
+
+</script>
+<script>
+// Collisions: atualiza projéteis/inimigos/power-ups da partida e resolve os contatos.
+class Collisions {
+  constructor(game) { this.game = game; }
+
+  updatePlayerBullets(dt) {
+    const g = this.game;
+    g.playerBullets = g.playerBullets.filter(b => {
+      b.update(dt, g);
+      return !b.offscreen(g) && !this._bulletHitsTarget(b);
+    });
+  }
+
+  _bulletHitsTarget(b) {
+    const g = this.game;
+    for (const en of g.enemies) {
+      if (b.touches(en)) {
+        if (en.takeHit()) {
+          g.killEnemy(en);
+          g.enemies.splice(g.enemies.indexOf(en), 1);
+        }
+        return true;
+      }
+    }
+    const boss = g.boss;
+    if (boss && b.touches(boss)) {
+      g.particles.push(...Particle.burst(b.x, b.y, 4, '#ffff88', { speed: [2, 2], life: 0.25 }));
+      if (boss.takeHit()) g.killBoss();
+      return true;
+    }
+    return false;
+  }
+
+  updateEnemies(dt) {
+    const g = this.game;
+    for (const en of [...g.enemies]) {
+      en.update(dt, g);
+      if (en.offscreen(g)) { g.enemies.splice(g.enemies.indexOf(en), 1); continue; }
+      en.tryFire(g);
+      if (g.player.invuln <= 0 && en.hurts(g.player, 3)) {
+        g.onPlayerHit();
+        if (en.constructor.DIES_ON_CONTACT) {
+          const i = g.enemies.indexOf(en);
+          if (i >= 0) g.enemies.splice(i, 1);
+        }
+      }
+    }
+  }
+
+  updateEnemyBullets(dt) {
+    const g = this.game;
+    g.enemyBullets = g.enemyBullets.filter(b => {
+      b.update(dt, g);
+      if (b.offscreen(g)) return false;
+      if (g.player.invuln <= 0 && b.hurts(g.player)) { g.onPlayerHit(); return false; }
+      return true;
+    });
+  }
+
+  updatePowerUps(dt) {
+    const g = this.game;
+    g.powerUps = g.powerUps.filter(p => {
+      p.update(dt, g);
+      if (p.offscreen(g)) return false;
+      if (p.touches(g.player)) { g.applyPowerUp(p.kind); return false; }
+      return true;
+    });
+  }
+}
+
+</script>
+<script>
+// GameSession: uma partida em andamento (entidades, colisões, power-ups, pontuação).
+class GameSession {
+  constructor(canvas, { difficulty = 'Normal', phaseIndex = 0, score = 0, hp = MAX_HP,
+                        shotLevel = 0, fireLevel = 0, shieldCharges = 0, shipId = 'plane' } = {}) {
+    this.canvas = canvas;
+    this.player = new Player(this, hp);
+    this.shipId = shipId;
+    this.difficulty = difficulty;
+    this.phase = new PhaseRunner(phaseIndex);
+    this.collisions = new Collisions(this);
+
+    this.enemyBullets = []; this.playerBullets = [];
+    this.enemies = []; this.particles = []; this.powerUps = [];
+
+    this.elapsed = 0;
+    this.score = score;
+    this.alive = true;
+    this.hitFlash = 0;
+    this.fireTimer = 0;
+    Object.assign(this, { shotLevel, fireLevel, shieldCharges });
+  }
+
+  // ---------- construção / save ----------
+  static restore(canvas, data, settings) {
+    return new GameSession(canvas, {
+      difficulty: data.difficulty || settings.difficulty,
+      phaseIndex: data.phaseIndex || 0,
+      score: data.score || 0,
+      hp: data.hp != null ? data.hp : MAX_HP,
+      shotLevel: data.shotLevel || 0,
+      fireLevel: data.fireLevel || 0,
+      shieldCharges: data.shieldCharges || 0,
+      shipId: settings.selectedShip,
+    });
+  }
+  snapshot() {
+    return { phaseIndex: this.phase.index, score: this.score, hp: this.player.hp, difficulty: this.difficulty,
+             shotLevel: this.shotLevel, fireLevel: this.fireLevel, shieldCharges: this.shieldCharges };
+  }
+
+  // ---------- atalhos ----------
+  get width() { return this.canvas.width; }
+  get height() { return this.canvas.height; }
+  get d() { return DIFF[this.difficulty] || DIFF.Normal; }
+  get boss() { return this.phase.boss; }
+  fireCooldown() { return 0.16 * Math.pow(0.82, this.fireLevel); }
+
+  nextPhase() {
+    this.phase = new PhaseRunner(this.phase.index + 1);
+    this.enemyBullets = []; this.enemies = [];
+  }
+
+  // ---------- eventos de jogo ----------
+  applyPowerUp(kind) {
+    if (kind === 'spread') this.shotLevel = Math.min(MAX_SHOT_LEVEL, this.shotLevel + 1);
+    else if (kind === 'rapidfire') this.fireLevel = Math.min(MAX_FIRE_LEVEL, this.fireLevel + 1);
+    else if (kind === 'shield') this.shieldCharges = Math.min(MAX_SHIELD, this.shieldCharges + 1);
+    else if (kind === 'life') {
+      if (this.player.hp < MAX_HP) this.player.hp += 1;
+      else this.score += 200;
+    }
+  }
+
+  maybeDropPowerUp(x, y, guaranteed = false) {
+    if (guaranteed || Math.random() <= this.d.drop) {
+      this.powerUps.push(new PowerUp(x, y, POWERUP_TYPES[Math.floor(Math.random() * POWERUP_TYPES.length)]));
+    }
+  }
+
+  onPlayerHit() {
+    const p = this.player;
+    if (this.shieldCharges > 0) {
+      this.shieldCharges -= 1;
+      p.invuln = 0.6; this.hitFlash = 0.5;
+      this.particles.push(...Particle.burst(p.x, p.y, 14, '#55ccff', { speed: [2.4, 2.4], life: 0.4 }));
+      return;
+    }
+    p.hp -= 1;
+    p.invuln = 1.6; this.hitFlash = 1;
+    this.particles.push(...Particle.burst(p.x, p.y, 18, '#ff3355'));
+    if (p.hp <= 0) this.alive = false;
+  }
+
+  killEnemy(en) {
+    this.score += en.points;
+    this.particles.push(...Particle.burst(en.x, en.y, 14, en.color, { life: 0.5 }));
+    this.maybeDropPowerUp(en.x, en.y);
+  }
+
+  killBoss() {
+    const b = this.boss;
+    this.score += BOSS_POINTS;
+    this.particles.push(...Particle.burst(b.x, b.y, 50, '#ffaa55', { speed: [1, 6], life: 1.0 }));
+    this.maybeDropPowerUp(b.x, b.y, true);
+    this.phase.finishBoss();
+    this.enemyBullets = [];
+  }
+
+  // ---------- atualização ----------
+  update(dt, input) {
+    this.elapsed += dt;
+    const focus = this.player.update(dt, this, input);
+
+    this.fireTimer += dt;
+    if (this.fireTimer > this.fireCooldown()) {     // tiro automático, independe do controle
+      this.fireTimer = 0;
+      this.playerBullets.push(...this.player.shoot(this.shotLevel));
+    }
+
+    this.collisions.updatePlayerBullets(dt);
+    this.phase.update(dt, this);
+    this.collisions.updateEnemies(dt);
+    this.collisions.updateEnemyBullets(dt);
+    this.collisions.updatePowerUps(dt);
+
+    for (const p of this.particles) p.update(dt, this);
+    this.particles = this.particles.filter(p => !p.dead);
+    this.hitFlash = Math.max(0, this.hitFlash - 0.04);
+
+    const boss = this.boss;
+    if (boss && boss.solid() && this.player.invuln <= 0 && boss.hurts(this.player)) this.onPlayerHit();
+    return focus;
+  }
+
+  // ---------- desenho ----------
+  draw(ctx, focus, showHitbox) {
+    ctx.fillStyle = 'rgba(5,5,12,0.35)';
+    ctx.fillRect(0, 0, this.width, this.height);
+    if (this.hitFlash > 0) {
+      ctx.fillStyle = `rgba(255,0,60,${this.hitFlash * 0.25})`;
+      ctx.fillRect(0, 0, this.width, this.height);
+    }
+    for (const list of [this.enemyBullets, this.enemies]) for (const e of list) e.draw(ctx);
+    if (this.boss) this.boss.draw(ctx, this);
+    for (const list of [this.powerUps, this.playerBullets, this.particles]) for (const e of list) e.draw(ctx);
+    this.player.draw(ctx, this, focus, showHitbox, this.shieldCharges, SHIPS.get(this.shipId));
+  }
+}
+
+</script>
+<script>
+// HUD em HTML (vida, pontos, power-ups, barra do chefe).
+class Hud {
+  constructor() {
+    const $ = id => document.getElementById(id);
+    this.root = $('hud'); this.escHint = $('escHint');
+    this.hp = $('hpDisplay'); this.score = $('scoreDisplay'); this.phase = $('phaseDisplay');
+    this.powers = $('powersDisplay'); this.diff = $('diffDisplay');
+    this.bossWrap = $('bossBarWrap'); this.bossFill = $('bossBarFill'); this.bossLabel = $('bossLabel');
+  }
+
+  // mode: 'none' | 'paused' | 'playing'
+  setMode(mode) {
+    this.root.classList.toggle('hidden', mode === 'none');
+    this.escHint.classList.toggle('hidden', mode !== 'playing');
+    this._showBoss(false);
+  }
+
+  _showBoss(visible) {
+    this.bossWrap.classList.toggle('hidden', !visible);
+    this.bossLabel.classList.toggle('hidden', !visible);
+  }
+
+  update(game) {
+    const hp = Math.max(game.player.hp, 0);
+    this.hp.textContent = 'Vida: ' + '♥ '.repeat(hp) + '· '.repeat(MAX_HP - hp);
+    this.score.textContent = Math.floor(game.score);
+    this.phase.textContent = (game.phase.index + 1) + ' / ' + PHASES.length;
+    this.diff.textContent = game.difficulty;
+
+    const powers = [];
+    if (game.shotLevel > 0) powers.push(`Tiro Nv.${game.shotLevel + 1}`);
+    if (game.fireLevel > 0) powers.push(`Cadência Nv.${game.fireLevel}`);
+    if (game.shieldCharges > 0) powers.push(`Escudo x${game.shieldCharges}`);
+    this.powers.textContent = powers.join(' | ');
+
+    const boss = game.boss;
+    this._showBoss(!!boss);
+    if (boss) {
+      this.bossLabel.textContent = boss.name;
+      this.bossFill.style.width = Math.max(0, boss.hp / boss.maxHp * 100) + '%';
+    }
+  }
+}
+
+</script>
+<script>
+// Telas em HTML (menus, ranking, naves...) e navegação por teclado nos botões.
+const escapeHtml = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+class ScreenManager {
+  // nome do estado -> id do elemento
+  static IDS = {
+    main_menu: 'mainMenu', paused: 'pauseMenu', options: 'optionsMenu', ranking: 'rankingMenu',
+    ships: 'shipsMenu', enter_name: 'enterNameMenu', game_over: 'gameOverMenu',
+    phase_complete: 'phaseCompleteMenu', victory: 'victoryMenu',
+  };
+
+  constructor(app) {
+    this.app = app;
+    this.el = {};
+    for (const [name, id] of Object.entries(ScreenManager.IDS)) this.el[name] = document.getElementById(id);
+    this.menuIndex = 0;
+  }
+
+  show(name) {
+    for (const el of Object.values(this.el)) el.classList.add('hidden');
+    if (this.el[name]) this.el[name].classList.remove('hidden');
+    const render = this['render_' + name];
+    if (render) render.call(this);
+    this.menuIndex = 0;
+  }
+
+  $(id) { return document.getElementById(id); }
+  get settings() { return this.app.settings; }
+  get session() { return this.app.session; }
+
+  // ----- telas -----
+  render_main_menu() {
+    const has = this.app.store.hasSave();
+    const btn = this.$('loadBtn');
+    btn.disabled = !has;
+    btn.textContent = has ? 'Carregar Jogo' : 'Carregar Jogo (vazio)';
+    this.$('highScoreDisplay').textContent = Math.floor(this.settings.highScore);
+  }
+
+  render_options() {
+    this.$('diffBtn').textContent = `Dificuldade: ${this.settings.difficulty}`;
+    this.$('hitboxBtn').textContent = `Mostrar hitbox sempre: ${this.settings.showHitboxAlways ? 'Sim' : 'Não'}`;
+  }
+
+  render_ranking() {
+    const list = this.app.store.loadRanking();
+    let html = '<tr><th>#</th><th>Nome</th><th>Pontos</th><th>Fase</th></tr>';
+    if (list.length === 0) html += '<tr><td colspan="4" style="text-align:center;color:#667;">Nenhum recorde ainda</td></tr>';
+    list.forEach((e, i) => {
+      html += `<tr><td>${i + 1}</td><td>${escapeHtml(e.name)}</td><td>${e.score}</td><td>${escapeHtml(e.phase || '')}</td></tr>`;
+    });
+    this.$('rankingTable').innerHTML = html;
+  }
+
+  render_ships() {
+    const grid = this.$('shipsGrid');
+    grid.innerHTML = '';
+    let unlockedCount = 0;
+    for (const ship of this.app.ships.list) {
+      const unlocked = ship.isUnlocked(this.settings.highScore);
+      if (unlocked) unlockedCount++;
+      const selected = this.settings.selectedShip === ship.id;
+      const card = document.createElement('div');
+      card.className = 'ship-card' + (unlocked ? '' : ' locked') + (selected ? ' selected' : '');
+      const add = (cls, text) => { const d = document.createElement('div'); d.className = cls; d.textContent = text; card.appendChild(d); };
+
+      if (unlocked) {
+        const img = document.createElement('img');
+        img.src = ship.src;
+        card.appendChild(img);
+        add('ship-name', ship.name);
+        if (selected) add('ship-tag', '✓ EQUIPADA');
+        card.addEventListener('click', () => {
+          this.settings.selectedShip = ship.id;
+          this.app.store.saveSettings(this.settings);
+          this.render_ships();
+        });
+      } else {
+        add('lock-icon', '🔒');
+        add('ship-name', ship.secret ? '???' : ship.name);
+        add('ship-lock', ship.secret ? `Nave secreta - ${ship.pointsNeeded()} pts` : `Precisa de ${ship.pointsNeeded()} pts`);
+      }
+      grid.appendChild(card);
+    }
+    this.$('shipsProgress').textContent =
+      `${unlockedCount} / ${this.app.ships.list.length} naves desbloqueadas · Recorde atual: ${Math.floor(this.settings.highScore)} pts`;
+  }
+
+  render_enter_name() {
+    this.$('enterNameStats').innerHTML = `<p>Pontuação: <b style="color:#ffcc66;">${Math.floor(this.app.pendingRanking.score)}</b></p>`;
+    const input = this.$('nameInput');
+    input.value = '';
+    setTimeout(() => input.focus(), 50);
+  }
+
+  render_game_over() {
+    const s = this.session;
+    this.$('gameOverStats').innerHTML = `
+      <p>Você chegou até a <b>${s.phase.name}</b></p>
+      <p>Pontuação final: <b>${Math.floor(s.score)}</b></p>
+      <p>Recorde: <b>${Math.floor(this.settings.highScore)}</b></p>`;
+  }
+
+  render_phase_complete() {
+    this.$('phaseCompleteTitle').textContent = this.session.phase.name + ' - COMPLETA';
+    this.$('phaseCompleteStats').innerHTML = `<p>Pontuação: <b>${Math.floor(this.session.score)}</b></p>`;
+  }
+
+  render_victory() {
+    this.$('victoryStats').innerHTML =
+      `<p>Pontuação final: <b>${Math.floor(this.session.score)}</b></p><p>Recorde: <b>${Math.floor(this.settings.highScore)}</b></p>`;
+  }
+
+  // ----- navegação por teclado (setas + Enter) -----
+  visibleButtons(state) {
+    const el = this.el[state];
+    return el ? Array.from(el.querySelectorAll('.menu-btn')).filter(b => !b.disabled) : [];
+  }
+
+  // Retorna a ação do botão escolhido (ou null).
+  handleKey(state, e) {
+    const btns = this.visibleButtons(state);
+    if (!btns.length) return null;
+    const move = delta => {
+      this.menuIndex = (this.menuIndex + delta + btns.length) % btns.length;
+      btns.forEach(b => b.classList.remove('active'));
+      btns[this.menuIndex].classList.add('active');
+      e.preventDefault();
+    };
+    if (e.key === 'ArrowDown') move(1);
+    else if (e.key === 'ArrowUp') move(-1);
+    else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      return (btns[this.menuIndex] || btns[0]).dataset.action;
+    }
+    return null;
+  }
+}
+
+</script>
+<script>
+// App: canvas, loop principal, estados e ações dos botões.
+class App {
+  constructor() {
+    this.canvas = document.getElementById('game');
+    this.ctx = this.canvas.getContext('2d');
+    this.resize();
+    window.addEventListener('resize', () => this.resize());
+    window.addEventListener('orientationchange', () => setTimeout(() => this.resize(), 200));
+
+    this.store = new SaveStore();
+    this.settings = this.store.loadSettings();
+    this.ships = SHIPS;
+    this.input = new Input(this.canvas);
+    this.hud = new Hud();
+    this.screens = new ScreenManager(this);
+
+    this.session = null;
+    this.state = 'main_menu';
+    this.pendingRanking = null;   // { score, phaseLabel, nextScreen }
+    this.lastTime = 0;
+    this.actions = this._buildActions();
+
+    this.input.bind(() => this.state === 'playing', () => this.handleEscape());
+    this.hud.escHint.textContent = ('ontouchstart' in window) ? 'II Pausar' : 'ESC = pausar';
+    this.hud.escHint.addEventListener('click', () => this.handleEscape());
+    this._bindUi();
+    this.go('main_menu');
+  }
+
+  // Campo de jogo com largura lógica fixa (480 em telas altas, 700 em telas largas) e altura
+  // acompanhando a proporção da tela. O canvas é escalado por CSS para caber inteiro na janela.
+  resize() {
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const w = vw / vh < 0.8 ? 480 : 700;
+    const h = Math.round(Math.min(Math.max(w * vh / vw, 640), 960));
+    if (this.canvas.width !== w) this.canvas.width = w;
+    if (this.canvas.height !== h) this.canvas.height = h;
+    const scale = Math.min(vw / w, vh / h);
+    const cw = Math.floor(w * scale), ch = Math.floor(h * scale);
+    this.canvas.style.width = cw + 'px';
+    this.canvas.style.height = ch + 'px';
+    const root = document.documentElement.style;       // o HUD em HTML se alinha ao campo de jogo
+    root.setProperty('--gx', Math.round((vw - cw) / 2) + 'px');
+    root.setProperty('--gy', Math.round((vh - ch) / 2) + 'px');
+    root.setProperty('--gw', cw + 'px');
+    document.documentElement.classList.toggle('narrow', cw < 600);
+  }
+
+  get showHitbox() { return this.settings.showHitboxAlways || this.input.touchActive; }
+
+  // ---------- estados ----------
+  go(name) {
+    this.state = name;
+    this.screens.show(name);
+    this.hud.setMode(name === 'playing' ? 'playing' : name === 'paused' ? 'paused' : 'none');
+  }
+
+  handleEscape() {
+    if (this.state === 'playing') this.go('paused');
+    else if (this.state === 'paused') this.go('playing');
+    else if (this.state === 'options') this.actions.back();
+  }
+
+  startSession(session) {
+    this.session = session;
+    this.input.reset(session.player);
+    this.go('playing');
+  }
+
+  // Fim da partida ('game_over' ou 'victory'): atualiza recorde e pede o nome se entrou no ranking.
+  finishRun(nextScreen) {
+    const s = this.session;
+    if (s.score > this.settings.highScore) { this.settings.highScore = s.score; this.store.saveSettings(this.settings); }
+    if (s.score > 0 && this.store.rankingQualifies(s.score)) {
+      this.pendingRanking = { score: s.score, phaseLabel: s.phase.name, nextScreen };
+      this.go('enter_name');
+    } else {
+      this.go(nextScreen);
+    }
+  }
+
+  _buildActions() {
+    const save = () => this.store.saveSettings(this.settings);
+    const toMenu = () => this.go('main_menu');
+    return {
+      new_game: () => {
+        this.store.deleteSave();
+        this.startSession(new GameSession(this.canvas, { difficulty: this.settings.difficulty, shipId: this.settings.selectedShip }));
+      },
+      load_game: () => {
+        const data = this.store.loadGame();
+        if (data) this.startSession(GameSession.restore(this.canvas, data, this.settings));
+      },
+      options: () => this.go('options'),
+      ranking: () => this.go('ranking'),
+      ships: () => this.go('ships'),
+      quit: () => {
+        document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#0ff;font-family:monospace;font-size:1.4em;">Obrigado por jogar! Você pode fechar esta aba.</div>';
+      },
+      resume: () => this.go('playing'),
+      save_exit: () => { this.store.saveGame(this.session.snapshot()); toMenu(); },
+      quit_no_save: toMenu,
+      back_to_menu: toMenu,
+      toggle_difficulty: () => {
+        const i = DIFFICULTIES.indexOf(this.settings.difficulty);
+        this.settings.difficulty = DIFFICULTIES[(i + 1) % DIFFICULTIES.length];
+        save(); this.go('options');
+      },
+      toggle_hitbox: () => {
+        this.settings.showHitboxAlways = !this.settings.showHitboxAlways;
+        save(); this.go('options');
+      },
+      back: () => { save(); toMenu(); },
+      submit_name: () => {
+        const name = document.getElementById('nameInput').value.trim() || 'Jogador';
+        this.store.addToRanking(name, this.pendingRanking.score, this.pendingRanking.phaseLabel);
+        this.store.deleteSave();
+        this.go(this.pendingRanking.nextScreen);
+      },
+      next_phase: () => {
+        if (this.session.phase.isLast) this.finishRun('victory');
+        else { this.session.nextPhase(); this.go('playing'); }
+      },
+    };
+  }
+
+  doAction(name) { this.actions[name](); }
+
+  _bindUi() {
+    document.querySelectorAll('.menu-btn').forEach(btn => {
+      btn.addEventListener('click', () => { if (!btn.disabled) this.doAction(btn.dataset.action); });
+    });
+    const nameInput = document.getElementById('nameInput');
+    nameInput.addEventListener('keydown', e => {
+      e.stopPropagation();
+      if (e.key === 'Enter') this.doAction('submit_name');
+    });
+    window.addEventListener('keydown', e => {
+      if (this.state === 'playing' || this.state === 'enter_name') return;
+      const action = this.screens.handleKey(this.state, e);
+      if (action) this.doAction(action);
+    });
+  }
+
+  // ---------- loop ----------
+  frame(now) {
+    const dt = Math.min((now - this.lastTime) / 1000 || 0, 0.033);
+    this.lastTime = now;
+    const s = this.session;
+
+    if (this.state === 'playing') {
+      const focus = s.update(dt, this.input);
+      s.draw(this.ctx, focus, this.showHitbox);
+      this.hud.update(s);
+      if (!s.alive) this.finishRun('game_over');
+      else if (s.phase.isComplete) this.go('phase_complete');
+    } else if (this.state === 'paused') {
+      s.draw(this.ctx, false, this.showHitbox);
+    }
+    requestAnimationFrame(t => this.frame(t));
+  }
+
+  run() {
+    this.lastTime = performance.now();
+    requestAnimationFrame(t => this.frame(t));
+  }
+}
+
+new App().run();
+
+</script>
+
+</body>
+</html>
